@@ -1,8 +1,5 @@
 <!DOCTYPE html>
-<!-- Markup Widget – SINGLE FILE v2.2
-     ▸ Sidebars now live in the HTML markup (easier theming)
-     ▸ JS only fills / toggles them → cleaner separation
--->
+<!-- Markup Widget – SINGLE FILE v2.3 (final polish) -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -33,7 +30,6 @@
   </style>
 </head>
 <body>
-  <!-- top bar -->
   <div id="topbar">
     <span id="title" style="font-weight:600">Markup Widget</span>
     <label for="url" class="vhidden">URL</label>
@@ -41,68 +37,62 @@
     <button id="go">Load</button>
   </div>
 
-  <!-- iframe preview -->
   <iframe id="frame" title="Preview"></iframe>
 
-  <!-- Left sidebar (domain) -->
   <div id="leftbar" class="sidebar">
     <div class="handle">▶</div>
     <div class="header">Domain</div>
     <div id="dm" class="list"></div>
   </div>
 
-  <!-- Right sidebar (page notes) -->
   <div id="rightbar" class="sidebar">
     <div class="handle">◀</div>
     <div class="header">Notes <span id="ver" style="margin-left:auto;font-size:12px;opacity:.6"></span></div>
-    <div class="subheader"><button data-f="all">All</button><button data-f="open">Open</button><button data-f="res">Resolved</button></div>
+    <div id="filt" class="subheader"><button data-f="all">All</button><button data-f="open">Open</button><button data-f="res">Resolved</button></div>
     <div id="pg" class="list"></div>
   </div>
 
-  <!-- floating toggle -->
   <button id="toggle" style="position:fixed;bottom:16px;right:16px;padding:8px 12px;border:none;border-radius:4px;background:#0070f3;color:#fff;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer;z-index:10000">Markup</button>
 
 <script>
-const VERSION="2.2";
-document.getElementById('ver').textContent='v'+VERSION;
-/* Firebase config */
-const FIREBASE={apiKey:"AIzaSyBtzYoN-ZCxclNcf4O4jB_ZIYocAmJsq8k",authDomain:"markup-d1dc8.firebaseapp.com",projectId:"markup-d1dc8"};const COL="website_feedback";
+const VERSION="2.3";
+const FIREBASE={apiKey:"AIzaSyBtzYoN-ZCxclNcf4O4jB_ZIYocAmJsq8k",authDomain:"markup-d1dc8.firebaseapp.com",projectId:"markup-d1dc8"};
+const COL="website_feedback";
 
 /* helpers */
-const $= (t,s={})=>Object.assign(document.createElement(t),{style:Object.assign({},s)});
+const $=(t,s={})=>Object.assign(document.createElement(t),{style:Object.assign({},s)});
 const cssSel=el=>{if(!(el instanceof Element))return'';const p=[];while(el&&el!==document.body){let s=el.nodeName.toLowerCase();if(el.id){p.unshift(s+'#'+el.id);break;}let sib=el,n=1;while((sib=sib.previousElementSibling)) if(sib.nodeName.toLowerCase()===s) n++;s+=`:nth-of-type(${n})`;p.unshift(s);el=el.parentElement;}return p.join(' > ');}  
 
 async function fs(){const load=src=>new Promise(r=>{if([...document.scripts].some(s=>s.src.includes(src)))return r();const e=$('script');e.src=src;e.async=1;e.onload=r;document.head.appendChild(e);});await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');if(!firebase.apps.length)firebase.initializeApp(FIREBASE);return firebase.firestore();}
 const fsR=fs();
 
-/* sidebar collapsing */
-['leftbar','rightbar'].forEach(id=>{const bar=document.getElementById(id);bar.querySelector('.handle').onclick=()=>{bar.classList.toggle('open');};});
+/* sidebar toggle */
+document.querySelectorAll('.sidebar .handle').forEach(h=>h.onclick=()=>h.parentElement.classList.toggle('open'));
 
 /* lists */
-const pg=document.getElementById('pg');const dm=document.getElementById('dm');let filt='all';document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filt=b.dataset.f;renderPg();});
-const pNotes=[];const dStats={};
-
-function row(html){const div=$('div');div.className='row';div.innerHTML=html;return div;}
-function renderPg(){pg.innerHTML='';pNotes.filter(n=>filt==='all'||(filt==='open'&&!n.resolved)||(filt==='res'&&n.resolved)).forEach(n=>{const r=row(`<input type='checkbox' ${n.resolved?'checked':''}><div style='flex:1;cursor:pointer'>${n.snippet||n.text.slice(0,80)}</div>`);r.querySelector('div').onclick=()=>window.scrollTo({top:n.y-100,behavior:'smooth'});r.querySelector('input').onchange=e=>fsR.then(fs=>fs.collection(COL).doc(n.id).update({resolved:e.target.checked}));pg.appendChild(r);});}
+const pg=document.getElementById('pg');const dm=document.getElementById('dm');let filter='all';document.querySelectorAll('#filt button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;renderPg();});
+const pArr=[];const dStats={};
+function row(html){const r=$('div');r.className='row';r.innerHTML=html;return r;}
+function renderPg(){pg.innerHTML='';pArr.filter(n=>filter==='all'||(filter==='open'&&!n.resolved)||(filter==='res'&&n.resolved)).forEach(n=>{const r=row(`<input type='checkbox' ${n.resolved?'checked':''}><div style='flex:1;cursor:pointer'>${n.snippet||n.text.slice(0,80)}</div>`);r.querySelector('div').onclick=()=>window.scrollTo({top:n.y-100,behavior:'smooth'});r.querySelector('input').onchange=e=>fsR.then(fs=>fs.collection(COL).doc(n.id).update({resolved:e.target.checked}));pg.appendChild(r);});}
 function renderDm(){dm.innerHTML='';Object.entries(dStats).sort((a,b)=>b[1].o-a[1].o).forEach(([u,s])=>{const r=row(`<div style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${u.replace(/^https?:\/\//,'')}</div><span style='font-size:11px;color:#555'>${s.o}/${s.o+s.r}</span>`);r.style.cursor='pointer';r.onclick=()=>window.open(u,'_blank');dm.appendChild(r);});}
 
 /* pins */
-const addPin=n=>{const p=$('div',{position:'absolute',top:`${n.y}px`,left:`${n.x}px`,transform:'translate(-50%,-50%)',background:n.resolved?'#4caf50':'#0070f3',color:'#fff',borderRadius:'50%',width:'18px',height:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',cursor:'pointer',zIndex:9998});p.textContent='+';document.body.appendChild(p);};
+const addPin=n=>{const p=$('div',{position:'absolute',top:`${n.y}px`,left:`${n.x}px`,transform:'translate(-50%,-50%)',background:n.resolved?'#4caf50':'#0070f3',color:'#fff',borderRadius:'50%',width:'18px',height:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',cursor:'pointer',zIndex:9998});p.textContent='+';p.className='__pin';document.body.appendChild(p);};
 
-/* Firestore realtime */
-fsR.then(fs=>{const url=location.href,host=location.hostname;fs.collection(COL).where('url','==',url).onSnapshot(s=>{pNotes.length=0;document.querySelectorAll('.__pin').forEach(el=>el.remove());s.forEach(d=>pNotes.push({id:d.id,...d.data()}));pNotes.sort((a,b)=>a.created-b.created);pNotes.forEach(addPin);renderPg();});fs.collection(COL).where('domain','==',host).onSnapshot(s=>{Object.keys(dStats).forEach(k=>delete dStats[k]);s.forEach(d=>{const n=d.data();const u=n.url;(dStats[u]=dStats[u]||{o:0,r:0})[n.resolved?'r':'o']++;});renderDm();});});
+/* Firestore listeners */
+fsR.then(fs=>{const url=location.href,host=location.hostname;fs.collection(COL).where('url','==',url).onSnapshot(s=>{pArr.length=0;document.querySelectorAll('.__pin').forEach(el=>el.remove());s.forEach(doc=>pArr.push({id:doc.id,...doc.data()}));pArr.sort((a,b)=>a.created-b.created);pArr.forEach(addPin);renderPg();});fs.collection(COL).where('domain','==',host).onSnapshot(s=>{Object.keys(dStats).forEach(k=>delete dStats[k]);s.forEach(doc=>{const d=doc.data();const u=d.url;(dStats[u]=dStats[u]||{o:0,r:0})[d.resolved?'r':'o']++;});renderDm();});});
 
 /* markup flow */
-let mk=false,ov=null;const tog=document.getElementById('toggle');const setT=()=>tog.textContent=`${mk?'Navigate':'Markup'} v${VERSION}`;setT();
-function pick(e){e.preventDefault();const{x,y}=e;stop();const t=document.elementFromPoint(x,y);const sel=cssSel(t);const snip=(t.innerText||t.alt||t.value||'').trim().slice(0,120);const box=$('div',{position:'fixed',top:`${y+10}px`,left:`${x+10}px`,background:'#fff',border:'1px solid #ccc',borderRadius:'4px',padding:'8px',width:'240px',zIndex:10001,boxShadow:'0 2px 8px rgba(0,0,0,.15)'});box.innerHTML=`<textarea rows='3' style='width:100%;box-sizing:border-box'></textarea><div style='text-align:right;margin-top:4px'><button>Save</button></div>`;const ta=box.querySelector('textarea');ta.value=snip?snip+' – ':'';box.querySelector('button').onclick=()=>{const txt=ta.value.trim();if(!txt)return alert('Comment required');fsR.then(fs=>fs.collection(COL).add({url:location.href,domain:location.hostname,selector:sel,x,y,text:txt,snippet:snip,created:Date.now(),resolved:false})).then(()=>box.remove()).catch(()=>alert('Save failed'));};document.body.appendChild(box);}
+let mk=false,ov=null;const toggle=document.getElementById('toggle');const setT=()=>toggle.textContent=`${mk?'Navigate':'Markup'} v${VERSION}`;setT();
+function pick(e){e.preventDefault();const{x,y}=e;stop();const t=document.elementFromPoint(x,y);const selector=cssSel(t);const snip=(t.innerText||t.alt||t.value||'').trim().slice(0,120);const box=$('div',{position:'fixed',top:`${y+10}px`,left:`${x+10}px`,background:'#fff',border:'1px solid #ccc',borderRadius:'4px',padding:'8px',width:'240px',zIndex:10001,boxShadow:'0 2px 8px rgba(0,0,0,.15)'});box.innerHTML=`<textarea rows='3' style='width:100%;box-sizing:border-box'></textarea><div style='text-align:right;margin-top:4px'><button>Save</button></div>`;const ta=box.querySelector('textarea');ta.value=snip?snip+' – ':'';box.querySelector('button').onclick=()=>{const txt=ta.value.trim();if(!txt)return alert('Comment required');fsR.then(fs=>fs.collection(COL).add({url:location.href,domain:location.hostname,selector,x,y,text:txt,snippet:snip,created:Date.now(),resolved:false}));box.remove();};document.body.appendChild(box);}
 function start(){mk=true;setT();ov=$('div',{position:'fixed',inset:0,background:'rgba(0,0,0,.05)',cursor:'crosshair',zIndex:9998});ov.addEventListener('click',pick,{once:true});document.body.appendChild(ov);}function stop(){mk=false;setT();ov?.remove();ov=null;}
-tog.onclick=()=>mk?stop():start();
-document.querySelectorAll('#filt button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;renderPg();});
+toggle.onclick=()=>mk?stop():start();
 
-/* iframe loader for testing same origin */
-const iframe=document.getElementById('frame');document.getElementById('go').onclick=()=>{const u=document.getElementById('url').value.trim();if(!u)return alert('Enter URL');iframe.src=u;};
+/* iframe loader */
+const frame=document.getElementById('frame');document.getElementById('go').onclick=()=>{const u=document.getElementById('url').value.trim();if(!u)return alert('Enter URL');frame.src=u;};
 
 document.getElementById('title').textContent+=` v${VERSION}`;
+document.getElementById('ver').textContent='v'+VERSION;
 </script>
 </body>
 </html>

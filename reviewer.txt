@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Markup Reviewer</title>
+  <style>
+    body,html{margin:0;height:100%}
+    #bar{display:flex;gap:.5rem;padding:.5rem;background:#eee;align-items:center}
+    #url{flex:1;padding:.25rem .5rem}
+    #frame{border:none;width:100%;height:calc(100% - 46px)}
+  </style>
+  <script src="feedbackWidget.js"></script>
+</head>
+<body>
+  <div id="bar">
+    <input id="url" placeholder="https://example.com/page.html">
+    <button id="load">Load</button>
+  </div>
+  <iframe id="frame"></iframe>
+
+  <script>
+    const urlIn = document.getElementById('url');
+    const frame = document.getElementById('frame');
+
+    document.getElementById('load').onclick = () => {
+      if (!urlIn.value) return alert('Enter a URL first');
+      frame.src = urlIn.value;
+      frame.onload = () => {
+        try {
+          // inject the widget into same‑origin pages automatically
+          const doc = frame.contentDocument;
+          if (doc && !doc.querySelector('script[data-fw]')) {
+            const s = doc.createElement('script');
+            s.src = 'feedbackWidget.js';
+            s.dataset.fw = 1;
+            doc.head.appendChild(s);
+          }
+        } catch(e){
+          console.warn('Cross‑origin – widget cannot inject automatically');
+        }
+      };
+    };
+  </script>
+</body>
+</html>

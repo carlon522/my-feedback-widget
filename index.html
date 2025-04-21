@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- index.html – landing/demo for my‑feedback‑widget (auto‑reads version from JS) -->
+<!-- index.html – landing/demo for my‑feedback‑widget (auto version, works with v1.9) -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -7,10 +7,10 @@
   <title>Markup Widget Demo</title>
   <style>
     *{box-sizing:border-box}body,html{margin:0;height:100%;font-family:system-ui,Arial,sans-serif}
-    #topbar{display:flex;gap:.5rem;padding:.5rem;background:#f7f7f7;border-bottom:1px solid #e0e0e0;align-items:center}
+    #topbar{display:flex;gap:.5rem;padding:.6rem;background:#f7f7f7;border-bottom:1px solid #ddd;align-items:center}
     #url{flex:1;padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:14px}
-    #load{padding:.35rem .75rem;border:none;background:#0070f3;color:#fff;border-radius:4px;font-size:14px;cursor:pointer}
-    #frame{border:none;width:100%;height:calc(100% - 52px)}
+    #load{padding:.38rem .8rem;border:none;background:#0070f3;color:#fff;border-radius:4px;font-size:14px;cursor:pointer}
+    #frame{border:none;width:100%;height:calc(100% - 56px)}
     a.bookmarklet{padding:.35rem .75rem;border:1px solid #0070f3;border-radius:4px;font-size:13px;color:#0070f3;text-decoration:none;background:#fff;white-space:nowrap}
     .vhidden{position:absolute!important;clip:rect(1px,1px,1px,1px);clip-path:inset(50%);height:1px;width:1px;overflow:hidden}
   </style>
@@ -29,17 +29,17 @@
   <!-- load the widget for this landing page -->
   <script src="feedbackWidget.js"></script>
   <script>
-    // if the widget exposes its version globally, show it; else leave generic
+    // Display version from the widget button once it's added to DOM
     window.addEventListener('load',()=>{
-      const btn=document.getElementById('__fw_btn');
       const span=document.getElementById('widget-name');
-      if(btn&&span){
-        const vMatch=btn.textContent.match(/v(\d+\.\d+)/);
-        if(vMatch) span.textContent+=` v${vMatch[1]}`;
-      }
+      const check=()=>{
+        const b=document.getElementById('__fw_btn');
+        if(b){const m=b.textContent.match(/v(\d+\.\d+)/);if(m) span.textContent+=` v${m[1]}`;}
+      };
+      setTimeout(check,500); // allow script to inject
     });
 
-    // inject widget into same‑origin pages loaded in the iframe
+    // Inject widget into same‑origin pages loaded in the iframe
     const urlIn=document.getElementById('url');
     const frame=document.getElementById('frame');
     document.getElementById('load').onclick=()=>{
@@ -54,7 +54,7 @@
           s.src='feedbackWidget.js?'+Date.now();
           d.head.appendChild(s);
         }
-      }catch(e){console.warn('Cross‑origin – cannot inject widget',e);}
+      }catch(e){console.warn('Cross‑origin – cannot inject widget',e);}  
     };
   </script>
 </body>

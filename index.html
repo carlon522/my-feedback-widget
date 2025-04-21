@@ -1,167 +1,108 @@
 <!DOCTYPE html>
-<!--
-  index.html  – single‑file ‘turn‑key’ build of Markup Widget v2.0
-  ▸  NO external JS files to manage; everything is inline (except Firebase SDKs).
-  ▸  Collapsible left (domain) and right (page) sidebars + pins + resolve.
-  ▸  Works on Firebase Spark plan – no composite indexes needed.
+<!-- Markup Widget – SINGLE FILE v2.2
+     ▸ Sidebars now live in the HTML markup (easier theming)
+     ▸ JS only fills / toggles them → cleaner separation
 -->
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Markup Widget Demo (single‑file)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Markup Widget Demo</title>
   <style>
-    /* minimal page chrome */
     *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
     body,html{margin:0;height:100%}
     #topbar{display:flex;gap:.5rem;padding:.6rem;background:#f5f5f5;border-bottom:1px solid #ddd;align-items:center}
     #url{flex:1;padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:14px}
-    #load{padding:.38rem .8rem;border:none;background:#0070f3;color:#fff;border-radius:4px;font-size:14px;cursor:pointer}
+    #go{padding:.38rem .8rem;border:none;background:#0070f3;color:#fff;border-radius:4px;font-size:14px;cursor:pointer}
     #frame{border:none;width:100%;height:calc(100% - 56px)}
-    a.bookmarklet{padding:.35rem .75rem;border:1px solid #0070f3;border-radius:4px;font-size:13px;color:#0070f3;text-decoration:none;background:#fff;white-space:nowrap}
-    .vhidden{position:absolute!important;clip:rect(1px,1px,1px,1px);clip-path:inset(50%);height:1px;width:1px;overflow:hidden}
+    .vhidden{position:absolute!important;clip:rect(1px,1px,1px,1px);height:1px;width:1px;overflow:hidden}
+
+    /* sidebars */
+    .sidebar{position:fixed;top:0;width:240px;height:100%;background:#fff;font-family:sans-serif;display:flex;flex-direction:column;z-index:9999;transition:transform .25s}
+    #leftbar{left:0;border-right:1px solid #ddd;box-shadow:2px 0 8px rgba(0,0,0,.08);transform:translateX(-240px)}
+    #rightbar{right:0;border-left:1px solid #ddd;box-shadow:-2px 0 8px rgba(0,0,0,.08);transform:translateX(240px)}
+    .sidebar.open{transform:translateX(0)}
+    .handle{position:absolute;top:50%;width:16px;height:48px;background:#0070f3;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;border-radius:4px 0 0 4px;user-select:none;transform:translateY(-50%)}
+    #leftbar .handle{right:-16px;border-radius:0 4px 4px 0}
+    #rightbar .handle{left:-16px}
+    .header{padding:.5rem 1rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600;display:flex;gap:.4rem;align-items:center}
+    .subheader{display:flex;font-size:12px;border-bottom:1px solid #eee}
+    .subheader button{flex:1}
+    .list{flex:1;overflow:auto;font-size:12px}
+    .row{border-bottom:1px solid #eee;padding:.5rem;display:flex;gap:.5rem}
   </style>
 </head>
 <body>
+  <!-- top bar -->
   <div id="topbar">
-    <span id="widget-name" style="font-weight:600">Markup Widget</span>
-    <label for="url" class="vhidden">Page URL</label>
-    <input id="url" type="url" placeholder="https://example.com/page.html"/>
-    <button id="load">Load</button>
+    <span id="title" style="font-weight:600">Markup Widget</span>
+    <label for="url" class="vhidden">URL</label>
+    <input id="url" type="url" placeholder="https://example.com/page.html" />
+    <button id="go">Load</button>
   </div>
-  <iframe id="frame" title="Preview frame"></iframe>
 
-  <script>
-  /* ------------------------------------------------------------ */
-  // CONFIG – edit only if you run your own Firebase project
-  const FW_CONFIG = {
-    firebaseConfig:{
-      apiKey:"AIzaSyBtzYoN-ZCxclNcf4O4jB_ZIYocAmJsq8k",
-      authDomain:"markup-d1dc8.firebaseapp.com",
-      projectId:"markup-d1dc8",
-      storageBucket:"markup-d1dc8.appspot.com",
-      messagingSenderId:"720023666477",
-      appId:"1:720023666477:web:8cf09bd8ad49bcaee75da4"},
-    collection:"website_feedback"
-  };
-  const FW_VERSION="2.0";
+  <!-- iframe preview -->
+  <iframe id="frame" title="Preview"></iframe>
 
-  /* ------------------------------------------------------------ */
-  // UTILS
-  const $ = (tag,styles={})=>Object.assign(document.createElement(tag),{style:Object.assign({},styles)});
-  const cssSel = el=>{if(!(el instanceof Element))return'';const p=[];while(el&&el!==document.body){let s=el.nodeName.toLowerCase();if(el.id){p.unshift(s+'#'+el.id);break;}let sib=el,n=1;while((sib=sib.previousElementSibling)) if(sib.nodeName.toLowerCase()===s) n++;s+=`:nth-of-type(${n})`;p.unshift(s);el=el.parentElement;}return p.join(' > ');}  
+  <!-- Left sidebar (domain) -->
+  <div id="leftbar" class="sidebar">
+    <div class="handle">▶</div>
+    <div class="header">Domain</div>
+    <div id="dm" class="list"></div>
+  </div>
 
-  // load Firebase compat
-  async function getFS(){
-    const load=src=>new Promise(res=>{if([...document.scripts].some(s=>s.src.includes(src)))return res();const e=document.createElement('script');e.src=src;e.async=1;e.onload=res;document.head.appendChild(e);});
-    await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-    await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
-    if(!firebase.apps.length) firebase.initializeApp(FW_CONFIG.firebaseConfig);
-    return firebase.firestore();
-  }
+  <!-- Right sidebar (page notes) -->
+  <div id="rightbar" class="sidebar">
+    <div class="handle">◀</div>
+    <div class="header">Notes <span id="ver" style="margin-left:auto;font-size:12px;opacity:.6"></span></div>
+    <div class="subheader"><button data-f="all">All</button><button data-f="open">Open</button><button data-f="res">Resolved</button></div>
+    <div id="pg" class="list"></div>
+  </div>
 
-  /* ------------------------------------------------------------ */
-  // WIDGET – self‑invoking to avoid globals
-  (function(){
-    const domain   = location.hostname;
-    const fsReady  = getFS();
-    const notesCol = ()=>fsReady.then(fs=>fs.collection(FW_CONFIG.collection));
+  <!-- floating toggle -->
+  <button id="toggle" style="position:fixed;bottom:16px;right:16px;padding:8px 12px;border:none;border-radius:4px;background:#0070f3;color:#fff;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer;z-index:10000">Markup</button>
 
-    /* ---------- sidebars ---------- */
-    const SB_W = 250; // open width
-    function makeBar(side){
-      const bar=$('div');
-      bar.style.cssText=`position:fixed;top:0;${side}:0;width:${SB_W}px;height:100%;background:#fff;`+
-        `border-${side==='right'?'left':'right'}:1px solid #ddd;box-shadow:${side==='right'?'-':'2'}px 0 8px rgba(0,0,0,.08);`+
-        `font-family:sans-serif;display:flex;flex-direction:column;z-index:9999;transition:transform .25s;`;
-      let collapsed=true;
-      const handle=$('div',{position:'absolute',top:'50%',[side==='right'?'left':'right']:'-16px',width:'16px',height:'48px',display:'flex',alignItems:'center',justifyContent:'center',background:'#0070f3',color:'#fff',cursor:'pointer',borderRadius:side==='right'?'4px 0 0 4px':'0 4px 4px 0',fontSize:'12px',userSelect:'none',transform:'translateY(-50%)'});
-      const sync=()=>{bar.style.transform=collapsed?`translateX(${side==='right'?SB_W:-SB_W}px)`:'translateX(0)';handle.textContent=collapsed?(side==='right'?'◀':'▶'):(side==='right'?'▶':'◀');};
-      handle.onclick=()=>{collapsed=!collapsed;sync();};
-      bar.appendChild(handle);sync();
-      document.body.appendChild(bar);
-      return bar;
-    }
+<script>
+const VERSION="2.2";
+document.getElementById('ver').textContent='v'+VERSION;
+/* Firebase config */
+const FIREBASE={apiKey:"AIzaSyBtzYoN-ZCxclNcf4O4jB_ZIYocAmJsq8k",authDomain:"markup-d1dc8.firebaseapp.com",projectId:"markup-d1dc8"};const COL="website_feedback";
 
-    const right = makeBar('right');
-    const left  = makeBar('left');
+/* helpers */
+const $= (t,s={})=>Object.assign(document.createElement(t),{style:Object.assign({},s)});
+const cssSel=el=>{if(!(el instanceof Element))return'';const p=[];while(el&&el!==document.body){let s=el.nodeName.toLowerCase();if(el.id){p.unshift(s+'#'+el.id);break;}let sib=el,n=1;while((sib=sib.previousElementSibling)) if(sib.nodeName.toLowerCase()===s) n++;s+=`:nth-of-type(${n})`;p.unshift(s);el=el.parentElement;}return p.join(' > ');}  
 
-    right.innerHTML += `<div style="padding:.5rem 1rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600;display:flex">Notes <span style="margin-left:auto;font-size:12px;opacity:.7">v${FW_VERSION}</span></div>`+
-      `<div id="fw-filter" style="display:flex;font-size:12px;border-bottom:1px solid #eee"><button data-f="all" style="flex:1">All</button><button data-f="open" style="flex:1">Open</button><button data-f="resolved" style="flex:1">Resolved</button></div>`+
-      `<div id="fw-page" style="flex:1;overflow:auto;font-size:12px"></div>`;
-    left.innerHTML  += `<div style="padding:.5rem 1rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600">Domain</div><div id="fw-domain" style="flex:1;overflow:auto;font-size:12px"></div>`;
-    const pgList = right.querySelector('#fw-page');
-    const dmList = left.querySelector('#fw-domain');
+async function fs(){const load=src=>new Promise(r=>{if([...document.scripts].some(s=>s.src.includes(src)))return r();const e=$('script');e.src=src;e.async=1;e.onload=r;document.head.appendChild(e);});await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');if(!firebase.apps.length)firebase.initializeApp(FIREBASE);return firebase.firestore();}
+const fsR=fs();
 
-    /* ---------- toggle button ---------- */
-    const btn=$('button',{position:'fixed',bottom:'16px',right:'16px',padding:'8px 12px',borderRadius:'4px',background:'#0070f3',color:'#fff',border:'none',cursor:'pointer',fontSize:'14px',boxShadow:'0 2px 8px rgba(0,0,0,.15)',zIndex:10000});
-    document.body.appendChild(btn);
+/* sidebar collapsing */
+['leftbar','rightbar'].forEach(id=>{const bar=document.getElementById(id);bar.querySelector('.handle').onclick=()=>{bar.classList.toggle('open');};});
 
-    let markup=false;const setBtn=()=>btn.textContent=markup?`Navigate v${FW_VERSION}`:`Markup v${FW_VERSION}`;setBtn();
+/* lists */
+const pg=document.getElementById('pg');const dm=document.getElementById('dm');let filt='all';document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filt=b.dataset.f;renderPg();});
+const pNotes=[];const dStats={};
 
-    /* ---------- storage ----------- */
-    const pageNotes=[]; const domainStats={}; let pgFilter='all';
+function row(html){const div=$('div');div.className='row';div.innerHTML=html;return div;}
+function renderPg(){pg.innerHTML='';pNotes.filter(n=>filt==='all'||(filt==='open'&&!n.resolved)||(filt==='res'&&n.resolved)).forEach(n=>{const r=row(`<input type='checkbox' ${n.resolved?'checked':''}><div style='flex:1;cursor:pointer'>${n.snippet||n.text.slice(0,80)}</div>`);r.querySelector('div').onclick=()=>window.scrollTo({top:n.y-100,behavior:'smooth'});r.querySelector('input').onchange=e=>fsR.then(fs=>fs.collection(COL).doc(n.id).update({resolved:e.target.checked}));pg.appendChild(r);});}
+function renderDm(){dm.innerHTML='';Object.entries(dStats).sort((a,b)=>b[1].o-a[1].o).forEach(([u,s])=>{const r=row(`<div style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${u.replace(/^https?:\/\//,'')}</div><span style='font-size:11px;color:#555'>${s.o}/${s.o+s.r}</span>`);r.style.cursor='pointer';r.onclick=()=>window.open(u,'_blank');dm.appendChild(r);});}
 
-    function renderPg(){pgList.innerHTML='';pageNotes.filter(n=>pgFilter==='all'||(pgFilter==='open'&&!n.resolved)||(pgFilter==='resolved'&&n.resolved)).forEach(n=>{
-      const row=$('div',{borderBottom:'1px solid #eee',padding:'.5rem',display:'flex',gap:'.5rem'});
-      row.innerHTML=`<input type='checkbox' ${n.resolved?'checked':''}>`+
-                    `<div style='flex:1;cursor:pointer'>${n.snippet||n.text.slice(0,80)}</div>`;
-      row.querySelector('div').onclick=()=>window.scrollTo({top:n.y-100,behavior:'smooth'});
-      row.querySelector('input').onchange=e=>notesCol().then(c=>c.doc(n.id).update({resolved:e.target.checked}));
-      pgList.appendChild(row);
-    });}
+/* pins */
+const addPin=n=>{const p=$('div',{position:'absolute',top:`${n.y}px`,left:`${n.x}px`,transform:'translate(-50%,-50%)',background:n.resolved?'#4caf50':'#0070f3',color:'#fff',borderRadius:'50%',width:'18px',height:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',cursor:'pointer',zIndex:9998});p.textContent='+';document.body.appendChild(p);};
 
-    function renderDm(){dmList.innerHTML='';Object.entries(domainStats).sort((a,b)=>b[1].o-a[1].o).forEach(([u,s])=>{
-      const row=$('div',{borderBottom:'1px solid #eee',padding:'.5rem',display:'flex',gap:'.5rem',cursor:'pointer'});
-      row.innerHTML=`<div style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${u.replace(/^https?:\/\//,'')}</div><span style='font-size:11px;color:#555'>${s.o}/${s.o+s.r}</span>`;
-      row.onclick=()=>window.open(u,'_blank');
-      dmList.appendChild(row);
-    });}
+/* Firestore realtime */
+fsR.then(fs=>{const url=location.href,host=location.hostname;fs.collection(COL).where('url','==',url).onSnapshot(s=>{pNotes.length=0;document.querySelectorAll('.__pin').forEach(el=>el.remove());s.forEach(d=>pNotes.push({id:d.id,...d.data()}));pNotes.sort((a,b)=>a.created-b.created);pNotes.forEach(addPin);renderPg();});fs.collection(COL).where('domain','==',host).onSnapshot(s=>{Object.keys(dStats).forEach(k=>delete dStats[k]);s.forEach(d=>{const n=d.data();const u=n.url;(dStats[u]=dStats[u]||{o:0,r:0})[n.resolved?'r':'o']++;});renderDm();});});
 
-    /* ---------- pins -------------- */
-    const addPin=n=>{const p=$('div',{position:'absolute',top:`${n.y}px`,left:`${n.x}px`,transform:'translate(-50%,-50%)',background:n.resolved?'#4caf50':'#0070f3',color:'#fff',borderRadius:'50%',width:'18px',height:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',cursor:'pointer',zIndex:9998});p.textContent='+';p.onclick=()=>window.scrollTo({top:n.y-100,behavior:'smooth'});document.body.appendChild(p);};
+/* markup flow */
+let mk=false,ov=null;const tog=document.getElementById('toggle');const setT=()=>tog.textContent=`${mk?'Navigate':'Markup'} v${VERSION}`;setT();
+function pick(e){e.preventDefault();const{x,y}=e;stop();const t=document.elementFromPoint(x,y);const sel=cssSel(t);const snip=(t.innerText||t.alt||t.value||'').trim().slice(0,120);const box=$('div',{position:'fixed',top:`${y+10}px`,left:`${x+10}px`,background:'#fff',border:'1px solid #ccc',borderRadius:'4px',padding:'8px',width:'240px',zIndex:10001,boxShadow:'0 2px 8px rgba(0,0,0,.15)'});box.innerHTML=`<textarea rows='3' style='width:100%;box-sizing:border-box'></textarea><div style='text-align:right;margin-top:4px'><button>Save</button></div>`;const ta=box.querySelector('textarea');ta.value=snip?snip+' – ':'';box.querySelector('button').onclick=()=>{const txt=ta.value.trim();if(!txt)return alert('Comment required');fsR.then(fs=>fs.collection(COL).add({url:location.href,domain:location.hostname,selector:sel,x,y,text:txt,snippet:snip,created:Date.now(),resolved:false})).then(()=>box.remove()).catch(()=>alert('Save failed'));};document.body.appendChild(box);}
+function start(){mk=true;setT();ov=$('div',{position:'fixed',inset:0,background:'rgba(0,0,0,.05)',cursor:'crosshair',zIndex:9998});ov.addEventListener('click',pick,{once:true});document.body.appendChild(ov);}function stop(){mk=false;setT();ov?.remove();ov=null;}
+tog.onclick=()=>mk?stop():start();
+document.querySelectorAll('#filt button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;renderPg();});
 
-    /* ---------- firestore listeners ---------- */
-    fsReady.then(fs=>{
-      fs.collection(FW_CONFIG.collection).where('url','==',location.href).onSnapshot(s=>{
-        pageNotes.length=0;document.querySelectorAll('.__fw_pin').forEach(el=>el.remove());
-        s.forEach(d=>pageNotes.push({id:d.id,...d.data()}));pageNotes.sort((a,b)=>a.created-b.created);
-        pageNotes.forEach(addPin);renderPg();});
+/* iframe loader for testing same origin */
+const iframe=document.getElementById('frame');document.getElementById('go').onclick=()=>{const u=document.getElementById('url').value.trim();if(!u)return alert('Enter URL');iframe.src=u;};
 
-      fs.collection(FW_CONFIG.collection).where('domain','==',domain).onSnapshot(s=>{
-        Object.keys(domainStats).forEach(k=>delete domainStats[k]);
-        s.forEach(d=>{const n=d.data();const u=n.url;(domainStats[u]=domainStats[u]||{o:0,r:0})[n.resolved?'r':'o']++;});renderDm();});
-    });
-
-    /* ---------- markup flow -------- */
-    let ov=null;
-    function startMarkup(){markup=true;setBtn();ov=$('div',{position:'fixed',inset:0,background:'rgba(0,0,0,.05)',cursor:'crosshair',zIndex:9998});ov.addEventListener('click',pick,{once:true});document.body.appendChild(ov);}    
-    function stopMarkup(){markup=false;setBtn();ov?.remove();ov=null;}
-
-    function pick(e){e.preventDefault();const{x,y}=e;stopMarkup();const tgt=document.elementFromPoint(x,y);const sel=cssSel(tgt);const snip=(tgt.innerText||tgt.alt||tgt.value||'').trim().slice(0,120);
-      const box=$('div',{position:'fixed',top:`${y+10}px`,left:`${x+10}px`,background:'#fff',border:'1px solid #ccc',borderRadius:'4px',padding:'8px',width:'240px',zIndex:10001,box-shadow:'0 2px 8px rgba(0,0,0,.15)'});
-      box.innerHTML=`<textarea rows='3' style='width:100%;box-sizing:border-box'></textarea><div style='text-align:right;margin-top:4px'><button>Save</button></div>`;
-      const ta=box.querySelector('textarea');ta.value=snip?snip+' – ':'';
-      box.querySelector('button').onclick=()=>{const txt=ta.value.trim();if(!txt)return alert('Comment can’t be empty');notesCol().then(c=>c.add({url:location.href,domain,selector:sel,x,y,text:txt,snippet:snip,created:Date.now(),resolved:false})).then(()=>box.remove()).catch(err=>{console.error(err);alert('Save failed');});};
-      document.body.appendChild(box);
-    }
-
-    btn.onclick=()=>markup?stopMarkup():startMarkup();
-    right.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{pgFilter=b.dataset.f;renderPg();});
-  })();
-
-  /* ------------------------------------------------------------ */
-  // simple iframe loader so you can test same‑origin pages
-  document.getElementById('load').onclick=()=>{
-    const url=document.getElementById('url').value.trim();
-    if(!url) return alert('Enter a URL');
-    const f=document.getElementById('frame');f.src=url;
-    f.onload=()=>{
-      try{const d=f.contentDocument;if(d&&!d.getElementById('__fw_btn')){const s=d.createElement('script');s.textContent=document.currentScript.previousElementSibling.textContent;d.head.appendChild(s);} }catch(e){console.warn('Cross‑origin frame – cannot inject widget');}
-    };
-  };
-  // show version in header
-  document.getElementById('widget-name').textContent+=` v${FW_VERSION}`;
-  </script>
+document.getElementById('title').textContent+=` v${VERSION}`;
+</script>
 </body>
 </html>

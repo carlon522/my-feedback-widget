@@ -1,15 +1,14 @@
-// feedbackWidget.js  – v1.10  (stable build)
+// feedbackWidget.js  – v1.11  (collapsible sidebars)
 // ---------------------------------------------------------------------------
-//  ✅  No Firestore composite indexes required (client‑side sort)
-//  ✅  Graceful error handling (UI still loads if Firestore is offline)
-//  ✅  Pins + dual sidebars (domain / page) & Resolve checkbox + filters
-//  ✅  Snippet, selector, url & domain saved per note
+//  ✱ Left and right sidebars can now be collapsed/expanded with a single click
+//    ▸  Small “❯” / “❮” grab‑handles stay visible, taking only 16 px width
+//  ✱ Width reduced to 260 px when open to free screen real‑estate
+//  ✱ All other v1.10 features intact (pins, filters, Firestore, etc.)
 // ---------------------------------------------------------------------------
 (() => {
-  const VERSION = '1.10';
+  const VERSION = '1.11';
   if (document.getElementById('__fw_btn')) return; // already injected
 
-  /* --------------------------------------------------------------------- */
   const CONFIG = {
     firebaseConfig: {
       apiKey: 'AIzaSyBtzYoN-ZCxclNcf4O4jB_ZIYocAmJsq8k',
@@ -24,7 +23,7 @@
   };
 
   /* --------------------------------------------------------------------- */
-  // Lazy‑load Firebase compat SDK (works on the free Spark plan)
+  // Lazy‑load Firebase compat SDK
   async function getFirestore() {
     const inject = src => new Promise(res => {
       if ([...document.scripts].some(s => s.src.includes(src))) return res();
@@ -34,67 +33,60 @@
       el.onload = res;
       document.head.appendChild(el);
     });
-
     await inject('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
     await inject('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
-
     if (!firebase.apps.length) firebase.initializeApp(CONFIG.firebaseConfig);
     return firebase.firestore();
   }
 
   /* --------------------------------------------------------------------- */
-  // Helpers
-  const $ = (tag, styles = {}) => Object.assign(document.createElement(tag), {
-    style: Object.assign({}, styles)
-  });
-
-  const BTN_STYLE = {
-    position: 'fixed', bottom: '16px', right: '16px', zIndex: 10000,
-    padding: '8px 12px', borderRadius: '4px', background: '#0070f3',
-    color: '#fff', border: 'none', cursor: 'pointer', fontSize: '14px',
-    boxShadow: '0 2px 8px rgba(0,0,0,.15)'
-  };
-
-  const cssSelector = el => {
-    if (!(el instanceof Element)) return '';
-    const parts = [];
-    while (el && el !== document.body) {
-      let sel = el.nodeName.toLowerCase();
-      if (el.id) { parts.unshift(sel + '#' + el.id); break; }
-      let sib = el, nth = 1;
-      while ((sib = sib.previousElementSibling)) if (sib.nodeName.toLowerCase() === sel) nth++;
-      sel += `:nth-of-type(${nth})`;
-      parts.unshift(sel);
-      el = el.parentElement;
-    }
-    return parts.join(' > ');
-  };
+  // Mini helpers
+  const $ = (t, s = {}) => Object.assign(document.createElement(t), { style: Object.assign({}, s) });
+  const cssSel = el => { if(!(el instanceof Element)) return ''; const p=[]; while(el&&el!==document.body){let s=el.nodeName.toLowerCase(); if(el.id){p.unshift(s+'#'+el.id); break;} let sib=el,n=1; while((sib=sib.previousElementSibling)) if(sib.nodeName.toLowerCase()===s) n++; s+=`:nth-of-type(${n})`; p.unshift(s); el=el.parentElement;} return p.join(' > ')};
 
   /* --------------------------------------------------------------------- */
-  // UI containers
+  // Collapsible sidebar factory
   const makeSidebar = (side) => {
-    const div = $('div');
-    div.style.cssText = `position:fixed;top:0;${side}:0;width:300px;height:100%;` +
-      `background:#fff;border-${side === 'right' ? 'left' : 'right'}:1px solid #ddd;` +
-      `box-shadow:${side === 'right' ? '-' : ''}2px 0 8px rgba(0,0,0,.1);` +
-      `z-index:9999;font-family:sans-serif;display:flex;flex-direction:column;overflow:hidden`;
-    document.body.appendChild(div);
-    return div;
+    const openW = 260;
+    const bar   = $('div');
+    bar.style.cssText = `position:fixed;top:0;${side}:0;width:${openW}px;height:100%;`+
+      `background:#fff;border-${side==='right'?'left':'right'}:1px solid #ddd;`+
+      `box-shadow:${side==='right'?'-':'2'}px 0 8px rgba(0,0,0,.1);z-index:9999;`+
+      `font-family:sans-serif;display:flex;flex-direction:column;overflow:hidden;`+
+      `transition:transform .25s ease`; // for slide effect
+
+    // collapsed state
+    let collapsed = false;
+    const handle = $('div', {
+      position:'absolute',top:'50%',[side==='right'?'left':'right']:'-16px',
+      width:'16px',height:'48px',display:'flex',alignItems:'center',justifyContent:'center',
+      background:'#0070f3',color:'#fff',cursor:'pointer',borderRadius:side==='right'?'4px 0 0 4px':'0 4px 4px 0',
+      fontSize:'12px',userSelect:'none',transform:'translateY(-50%)'
+    });
+    const updatePos = ()=>{
+      bar.style.transform = collapsed ? `translateX(${side==='right'?openW:-openW}px)` : 'translateX(0)';
+      handle.textContent  = collapsed ? (side==='right'?'◀':'▶') : (side==='right'?'▶':'◀');
+    };
+    handle.onclick = ()=>{ collapsed = !collapsed; updatePos(); };
+    bar.appendChild(handle);
+    updatePos();
+    document.body.appendChild(bar);
+    return bar;
   };
 
   const rightBar = makeSidebar('right');
   const leftBar  = makeSidebar('left');
 
-  rightBar.innerHTML = `<div style="padding:.5rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600;display:flex;gap:.3rem;align-items:center">` +
-    `Notes <span style="margin-left:auto;font-size:12px;opacity:.6">v${VERSION}</span></div>` +
-    `<div id="fw-filter" style="display:flex;font-size:12px;border-bottom:1px solid #eee">` +
-      `<button data-f="all" style="flex:1">All</button>` +
-      `<button data-f="open" style="flex:1">Open</button>` +
-      `<button data-f="resolved" style="flex:1">Resolved</button>` +
-    `</div>` +
+  rightBar.innerHTML += `<div style="padding:.5rem 1rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600;display:flex;gap:.4rem;align-items:center">`+
+    `Notes <span style="margin-left:auto;font-size:12px;opacity:.6">v${VERSION}</span></div>`+
+    `<div id="fw-filter" style="display:flex;font-size:12px;border-bottom:1px solid #eee">`+
+      `<button data-f="all" style="flex:1">All</button>`+
+      `<button data-f="open" style="flex:1">Open</button>`+
+      `<button data-f="resolved" style="flex:1">Resolved</button>`+
+    `</div>`+
     `<div id="fw-page-list" style="flex:1;overflow:auto;font-size:12px"></div>`;
 
-  leftBar.innerHTML = `<div style="padding:.5rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600">Domain</div>` +
+  leftBar.innerHTML += `<div style="padding:.5rem 1rem;border-bottom:1px solid #ddd;font-size:14px;font-weight:600">Domain</div>`+
     `<div id="fw-domain-list" style="flex:1;overflow:auto;font-size:12px"></div>`;
 
   const pageList   = rightBar.querySelector('#fw-page-list');
@@ -102,179 +94,72 @@
 
   /* --------------------------------------------------------------------- */
   // Floating toggle button
-  const toggleBtn = $('button', BTN_STYLE);
-  toggleBtn.id = '__fw_btn';
-  toggleBtn.textContent = CONFIG.label;
-  document.body.appendChild(toggleBtn);
+  const btnStyle = {
+    position:'fixed',bottom:'16px',right:'16px',zIndex:10000,padding:'8px 12px',borderRadius:'4px',background:'#0070f3',color:'#fff',border:'none',cursor:'pointer',fontSize:'14px',boxShadow:'0 2px 8px rgba(0,0,0,.15)'};
+  const toggle = $('button', btnStyle);
+  toggle.id='__fw_btn';
+  document.body.appendChild(toggle);
+
+  let inMarkup=false,pageFilter='all';
+  const setBtn=()=>toggle.textContent=inMarkup?`Navigate v${VERSION}`:`Markup v${VERSION}`;
+  setBtn();
+
+  rightBar.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{pageFilter=b.dataset.f;renderPage();});
 
   /* --------------------------------------------------------------------- */
-  // State
-  let overlay = null;
-  let inMarkup = false;
-  let pageFilter = 'all';
+  // Firestore live listeners
+  (async()=>{
+    let fs; try{fs=await getFirestore();}catch(e){console.error('FW firestore',e);return;}
+    const pageNotes=[], domainStats={}, domain=location.hostname;
 
-  const updateButtonLabel = () => {
-    toggleBtn.textContent = inMarkup ? `Navigate v${VERSION}` : CONFIG.label;
-  };
+    fs.collection(CONFIG.collection).where('url','==',location.href).onSnapshot(s=>{
+      pageNotes.length=0;document.querySelectorAll('.__fw_pin').forEach(p=>p.remove());
+      s.forEach(d=>pageNotes.push({id:d.id,...d.data()}));
+      pageNotes.sort((a,b)=>a.created-b.created);
+      pageNotes.forEach(n=>addPin(n));
+      renderPage();
+    });
 
-  rightBar.querySelectorAll('[data-f]').forEach(btn => btn.onclick = () => {
-    pageFilter = btn.dataset.f;
-    renderPageNotes();
-  });
+    fs.collection(CONFIG.collection).where('domain','==',domain).onSnapshot(s=>{
+      Object.keys(domainStats).forEach(k=>delete domainStats[k]);
+      s.forEach(d=>{const n=d.data();const u=n.url;(domainStats[u]=domainStats[u]||{o:0,r:0})[n.resolved?'r':'o']++;});
+      renderDomain();
+    });
 
-  /* --------------------------------------------------------------------- */
-  // Firestore listeners
-  (async () => {
-    let db;
-    try {
-      db = await getFirestore();
-    } catch (err) {
-      console.error('[FW] Firestore init failed', err);
-      return; // bail but leave UI
-    }
+    /* ---- helpers */
+    const row=html=>{const d=$('div',{borderBottom:'1px solid #eee',padding:'.5rem',display:'flex',gap:'.5rem',alignItems:'flex-start'});d.innerHTML=html;return d;};
 
-    const pageNotes   = [];
-    const domainStats = {};
-    const domainName  = location.hostname;
+    function renderPage(){pageList.innerHTML='';pageNotes.filter(n=>pageFilter==='all'||(pageFilter==='open'&&!n.resolved)||(pageFilter==='resolved'&&n.resolved)).forEach(n=>{
+        const r=row(`<input type='checkbox' ${n.resolved?'checked':''}><div style='flex:1;cursor:pointer'>${n.snippet||n.text.slice(0,80)}</div>`);
+        r.id=`fw-${n.id}`;
+        r.querySelector('div').onclick=()=>window.scrollTo({top:n.y-100,behavior:'smooth'});
+        r.querySelector('input').onchange=e=>fs.collection(CONFIG.collection).doc(n.id).update({resolved:e.target.checked});
+        pageList.appendChild(r);
+    });}
 
-    // Page‑specific notes (no orderBy to avoid index) ---------------------
-    db.collection(CONFIG.collection).where('url', '==', location.href)
-      .onSnapshot(snap => {
-        pageNotes.length = 0;
-        document.querySelectorAll('.__fw_pin').forEach(p => p.remove());
-
-        snap.forEach(doc => pageNotes.push({ id: doc.id, ...doc.data() }));
-        pageNotes.sort((a, b) => a.created - b.created);
-
-        pageNotes.forEach(n => addPin(n));
-        renderPageNotes();
-      }, err => console.error('[FW] page listener', err));
-
-    // Domain‑wide aggregation -------------------------------------------
-    db.collection(CONFIG.collection).where('domain', '==', domainName)
-      .onSnapshot(snap => {
-        Object.keys(domainStats).forEach(k => delete domainStats[k]);
-        snap.forEach(doc => {
-          const d = doc.data();
-          const u = d.url;
-          domainStats[u] = domainStats[u] || { open: 0, resolved: 0 };
-          d.resolved ? domainStats[u].resolved++ : domainStats[u].open++;
-        });
-        renderDomainList();
-      });
-
-    /* ---------------- render helpers ---------------- */
-    function row(inner) {
-      const div = $('div', {
-        borderBottom: '1px solid #eee', padding: '.5rem', display: 'flex',
-        gap: '.5rem', alignItems: 'flex-start'
-      });
-      div.innerHTML = inner;
-      return div;
-    }
-
-    function renderPageNotes() {
-      pageList.innerHTML = '';
-      pageNotes.filter(n => pageFilter === 'all' || (pageFilter === 'open' && !n.resolved) || (pageFilter === 'resolved' && n.resolved))
-        .forEach(n => {
-          const r = row(`<input type='checkbox' ${n.resolved ? 'checked' : ''}>` +
-                         `<div style='flex:1;cursor:pointer'>${n.snippet || n.text.slice(0, 80)}</div>`);
-          r.id = `fw-item-${n.id}`;
-          r.querySelector('div').onclick = () => window.scrollTo({ top: n.y - 100, behavior: 'smooth' });
-          r.querySelector('input').onchange = e => db.collection(CONFIG.collection).doc(n.id).update({ resolved: e.target.checked });
-          pageList.appendChild(r);
-        });
-    }
-
-    function renderDomainList() {
-      domainList.innerHTML = '';
-      Object.entries(domainStats).sort((a, b) => b[1].open - a[1].open)
-        .forEach(([url, stat]) => {
-          const total = stat.open + stat.resolved;
-          const r = row(`<div style='flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer' title='${url}'>${url.replace(/^https?:\/\//, '')}</div>` +
-                         `<span style='font-size:11px;color:#777'>${stat.open}/${total}</span>`);
-          r.onclick = () => window.open(url, '_blank');
-          domainList.appendChild(r);
-        });
-    }
-
-    /* ---------------- pins ---------------- */
-    function addPin(note) {
-      const pin = $('div', {
-        position: 'absolute', top: `${note.y}px`, left: `${note.x}px`, transform: 'translate(-50%,-50%)',
-        background: note.resolved ? '#4caf50' : '#0070f3', color: '#fff', borderRadius: '50%', width: '18px', height: '18px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', cursor: 'pointer', zIndex: 9998
-      });
-      pin.className = '__fw_pin';
-      pin.textContent = '+';
-      pin.onclick = () => document.getElementById(`fw-item-${note.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      document.body.appendChild(pin);
-    }
+    function renderDomain(){domainList.innerHTML='';Object.entries(domainStats).sort((a,b)=>b[1].o-a[1].o).forEach(([u,s])=>{
+      const r=row(`<div style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer' title='${u}'>${u.replace(/^https?:\/\//,'')}</div><span style='font-size:11px;color:#777'>${s.o}/${s.o+s.r}</span>`);
+      r.onclick=()=>window.open(u,'_blank');domainList.appendChild(r);
+    });}
 
   })();
 
   /* --------------------------------------------------------------------- */
-  // Markup / Navigate toggle
-  function enterMarkupMode() {
-    inMarkup = true;
-    updateButtonLabel();
-    overlay = $('div', {
-      position: 'fixed', inset: 0, zIndex: 9998, cursor: 'crosshair', background: 'rgba(0,0,0,.05)'
-    });
-    overlay.addEventListener('click', handlePick, { once: true });
-    document.body.appendChild(overlay);
-  }
+  // pins & markup flow
+  const pin=(n)=>{const p=$('div',{position:'absolute',top:`${n.y}px`,left:`${n.x}px`,transform:'translate(-50%,-50%)',background:n.resolved?'#4caf50':'#0070f3',color:'#fff',borderRadius:'50%',width:'18px',height:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',cursor:'pointer',zIndex:9998});p.textContent='+';p.className='__fw_pin';p.onclick=()=>document.getElementById(`fw-${n.id}`)?.scrollIntoView({behavior:'smooth'});document.body.appendChild(p);};
 
-  function exitMarkupMode() {
-    inMarkup = false;
-    overlay?.remove();
-    overlay = null;
-    updateButtonLabel();
-  }
+  let ov=null;
+  const enter=()=>{inMarkup=true;setBtn();ov=$('div',{position:'fixed',inset:0,background:'rgba(0,0,0,.05)',zIndex:9998,cursor:'crosshair'});ov.addEventListener('click',pick,{once:true});document.body.appendChild(ov);};
+  const exit=()=>{inMarkup=false;setBtn();ov?.remove();ov=null;};
 
-  function handlePick(e) {
-    e.preventDefault();
-    const { clientX: x, clientY: y } = e;
-    exitMarkupMode();
-
-    const target   = document.elementFromPoint(x, y);
-    const selector = cssSelector(target);
-    const snippet  = (target.innerText || target.alt || target.value || '').trim().slice(0, 120);
-
-    const box = $('div', {
-      position: 'fixed', top: `${y + 10}px`, left: `${x + 10}px`, zIndex: 10001,
-      background: '#fff', border: '1px solid #ccc', padding: '8px', borderRadius: '4px', width: '240px',
-      boxShadow: '0 2px 8px rgba(0,0,0,.15)'
-    });
-
-    box.innerHTML = `<textarea rows='3' style='width:100%;box-sizing:border-box'></textarea>` +
-      `<div style='text-align:right;margin-top:4px'><button>Save</button></div>`;
-    const ta   = box.querySelector('textarea');
-    const save = box.querySelector('button');
-    ta.value   = snippet ? `${snippet} – ` : '';
-
-    save.onclick = async () => {
-      const text = ta.value.trim();
-      if (!text) return alert('Comment cannot be empty');
-
-      try {
-        const fs = await getFirestore();
-        await fs.collection(CONFIG.collection).add({
-          url: location.href,
-          domain: location.hostname,
-          selector, x, y, text,
-          snippet, created: Date.now(), resolved: false
-        });
-        box.remove();
-      } catch (err) {
-        console.error('[FW] failed to save', err);
-        alert('Could not save note – see console');
-      }
-    };
-
+  function pick(e){e.preventDefault();const{x,y}=e;exit();const tgt=document.elementFromPoint(x,y);const sel=cssSel(tgt);const snip=(tgt.innerText||tgt.alt||tgt.value||'').trim().slice(0,120);
+    const box=$('div',{position:'fixed',top:`${y+10}px`,left:`${x+10}px`,background:'#fff',border:'1px solid #ccc',borderRadius:'4px',padding:'8px',width:'240px',zIndex:10001,boxShadow:'0 2px 8px rgba(0,0,0,.15)'});
+    box.innerHTML="<textarea rows='3' style='width:100%;box-sizing:border-box'></textarea><div style='text-align:right;margin-top:4px'><button>Save</button></div>";
+    const ta=box.querySelector('textarea');ta.value=snip?snip+' – ':'';
+    box.querySelector('button').onclick=async()=>{const txt=ta.value.trim();if(!txt)return alert('Comment cannot be empty');try{const fs=await getFirestore();await fs.collection(CONFIG.collection).add({url:location.href,domain:location.hostname,selector:sel,x,y,text:txt,snippet:snip,created:Date.now(),resolved:false});box.remove();}catch(err){console.error('FW save',err);alert('Could not save note');}};
     document.body.appendChild(box);
   }
 
-  toggleBtn.onclick = () => inMarkup ? exitMarkupMode() : enterMarkupMode();
-  updateButtonLabel();
+  const addPin=pin; // alias for listener scope
+  toggle.onclick=()=>inMarkup?exit():enter();
 })();

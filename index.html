@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- index.html – turnkey landing / demo page for my‑feedback‑widget -->
+<!-- index.html – turnkey landing / demo page for my‑feedback‑widget (accessibility‑checked) -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -8,26 +8,14 @@
 
   <!-- Minimal styling so it looks decent without any build step -->
   <style>
-    :root{
-      --brand:#0070f3;
-      --text:#222;
-    }
-    *{box-sizing:border-box;font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif}
+    :root{--brand:#0070f3;--text:#222}
+    *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Open Sans","Helvetica Neue",sans-serif}
     body,html{margin:0;height:100%;display:flex;flex-direction:column;color:var(--text)}
     header{background:var(--brand);color:#fff;padding:1rem}
     h1{margin:0;font-size:1.4rem;font-weight:600}
     p{margin:.35rem 0;font-size:.9rem}
 
-    a.bookmarklet{
-      display:inline-block;
-      background:#fff;
-      color:var(--brand);
-      padding:.35rem .65rem;
-      border-radius:4px;
-      text-decoration:none;
-      font-weight:600;
-      box-shadow:0 1px 3px rgba(0,0,0,.15);
-    }
+    a.bookmarklet{display:inline-block;background:#fff;color:var(--brand);padding:.35rem .65rem;border-radius:4px;text-decoration:none;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 
     main{flex:1;display:flex;flex-direction:column;height:100%}
     #toolbar{display:flex;gap:.5rem;padding:.5rem;background:#f5f5f5;align-items:center;border-bottom:1px solid #ddd}
@@ -36,6 +24,7 @@
     #frame{border:none;width:100%;flex:1}
 
     footer{font-size:.75rem;text-align:center;padding:.5rem;background:#fafafa;color:#666;border-top:1px solid #eee}
+    .visually-hidden{position:absolute!important;clip:rect(1px,1px,1px,1px);padding:0;border:0;height:1px;width:1px;overflow:hidden}
   </style>
 
   <!-- Load *our* widget so visitors can annotate this page too -->
@@ -52,8 +41,10 @@
 
   <main>
     <div id="toolbar">
-      <input id="url" placeholder="https://example.com/page.html">
-      <button id="load">Load</button>
+      <!-- Accessibility: label is visually hidden but satisfies "for" rule -->
+      <label for="url" class="visually-hidden">URL to review</label>
+      <input id="url" name="url" type="url" placeholder="https://example.com/page.html" aria-label="URL to review">
+      <button id="load" type="button">Load</button>
     </div>
     <iframe id="frame" title="Preview"></iframe>
   </main>
